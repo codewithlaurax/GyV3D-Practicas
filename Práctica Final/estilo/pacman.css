@@ -1,0 +1,61 @@
+/* Hoja de estilo para el título y las vidas de PacMan.html */
+
+body {
+   font-family: 'Press Start 2P';
+}
+
+/* Estilo para el título */
+.titulo {
+    height: 100px;
+    width: auto;
+    display: block;
+    margin: 20px auto;
+    position: relative;
+}
+
+.titulo-lives {
+    height: 50px;
+    width: auto;
+}
+
+/* Estilo para el contenedor de las vidas */
+#lives {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+#life-icons-container {
+    display: flex;
+}
+
+/* Estilo para las vidas de Pac-Man en forma de imágenes */
+.life-icon {
+    height: 50px;
+    width: auto;
+    margin-left: 5px;
+}
+
+#game-status-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#status-image {
+    height: 50px;
+    width: auto;
+    margin-right: 50px;
+}
+
+.score-icon {
+    height: 50px;
+    width: auto;
+    margin-left: 100px; /* Ajusta el margen según sea necesario */
+    margin-right: 10px;
+}
+
+#score {
+    font-size: 35px;
+}

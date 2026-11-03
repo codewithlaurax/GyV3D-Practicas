@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+    
+<head>
+    <title>Ejercicio 8 - Geometría y texturas en Three.js</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+</head>
+
+<!-- Carga la librería Three.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script> 
+    
+<script>
+    /** 
+    * Three.js: Ejercicio08.html
+    * 
+    * Se utiliza para crear una escena simple con una esfera.
+    */
+
+    /**
+    * Esta función se usa para inicializar la escena
+    */
+    function init() {
+        // Crear una nueva escena
+        var scene = new THREE.Scene();
+
+        // Obtener el canvas del DOM
+        var myCanvas = document.getElementById("myCanvas");
+        // Definir el ancho de la escena igual al ancho del canvas
+        var sceneWidth = myCanvas.width;
+        // Definir la altura de la escena igual a la altura del canvas
+        var sceneHeight = myCanvas.height;
+
+        // Crear una cámara en perspectiva con ángulo de visión de 90 grados
+        // Aspect ratio establecido con las dimensiones de la escena
+        // Near y far planes para el renderizado
+        var camera = new THREE.PerspectiveCamera(90, sceneWidth / sceneHeight, 0.01, 100);
+        // Posicionar la cámara a 5 unidades en el eje Z
+        camera.position.z = 5;
+
+        // Crear la geometría de una esfera (radio: 1, segmentos horizontales: 60, segmentos verticales: 60)
+        var geometry = new THREE.SphereGeometry(2, 60, 60);
+
+        // Textura
+        var texture = new THREE.TextureLoader().load("earth.png")
+
+        // Crear un material con mapeo normal para una apariencia colorida
+        var material = new THREE.MeshBasicMaterial({
+            map : texture
+        });
+
+        // Crear un mesh combinando la geometría y el material
+        var mesh = new THREE.Mesh(geometry, material);
+        // Añadir el mesh a la escena
+        scene.add(mesh);
+
+        // Crear el renderizador WebGL y asociarlo al canvas
+        var renderer = new THREE.WebGLRenderer({
+            antialias: true,  // Suavizar los bordes
+            canvas: myCanvas  // Renderizar en el canvas específico
+        });
+
+        // Establecer el tamaño del renderizador para que coincida con el tamaño del canvas
+        renderer.setSize(sceneWidth, sceneHeight);
+
+        // Iniciar la animación
+        animate(mesh, renderer, scene, camera);
+    }
+    
+    /**
+    * Esta función se usa para animar la escena
+    * @param {THREE.Mesh} mesh - El mesh que se va a animar
+    * @param {THREE.WebGLRenderer} renderer - El renderizador usado para mostrar la escena
+    * @param {THREE.Scene} scene - La escena que se va a renderizar
+    * @param {THREE.Camera} camera - La cámara usada para ver la escena
+    */
+    function animate(mesh, renderer, scene, camera) {
+        // Rotar el mesh un poco en cada frame para crear animación
+        // mesh.rotation.x += 0.01;
+        mesh.rotation.y += 0.01;
+
+        // Renderizar la escena desde la perspectiva de la cámara
+        renderer.render(scene, camera);
+
+        // Solicitar el siguiente frame de la animación
+        requestAnimationFrame(function () {
+            animate(mesh, renderer, scene, camera);
+        });
+    }
+</script>
+
+<body onload="init()">
+    <!-- Canvas donde se renderiza la escena -->
+    <canvas id="myCanvas" width="640" height="480"></canvas>
+</body>
+
+</html>

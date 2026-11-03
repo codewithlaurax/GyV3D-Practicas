@@ -1,0 +1,808 @@
+<!--  
+Autor:
+
+Partes implementadas: Laura Machado
+
+- Funcionalidad básica:
+    - Implementación requerida implementada correctamente
+        - Creación del título Pac-Man
+        - Creación de todas las imágenes
+        - Creación del favicon
+        - Estilo de los elementos en la carpeta estilo en el fichero pacman.css
+        - Todas las imágenes se encuentran en la carpeta imagenes
+        - Mensajes de status del juego mostrando diferentes textos
+            - Cuando comienza el juego: 'READY !!!!'
+            - Si pierde: 'GAME OVER'
+            - Si gana: 'YOU WON !!!!'
+- Funcionalidad avanzada:
+    - Sistema de puntuación:
+        - Colisionar con las esferas de puntuación suman: 10 puntos
+        - Colisionar con un potenciador suman: 50 puntos
+        - Colisionar con un fantasma cuando el potenciador está activado suma: 200 puntos
+        - Máxima puntuación: 1690 puntos
+    - Añadida nueva condición para ganar:
+        - Si se cogen todas las esferas de puntuación también se gana la partida (como el pacman original)
+        - No se ha excluido la función de ganar si se matan a todos los fantasmas
+- Mejoras:
+    - Añadidos sonidos. Se encuentran en la carpeta sonidos
+        - Sonido de la cabecera
+        - Sonido que se reproduce durante toda la partida
+        - Sonido al colisionar con un fantasma cuando el potenciador está desactivado
+        - Sonido al colisionar con un potenciador y durante los 10 segundos de duración del potenciador
+        - Sonido al colisionar con un fantasma cuando el potenciador está activo
+        - Sonido al perder la partida
+        - Sonido al ganar la partida
+-->
+
+<!DOCTYPE html>
+<html>  
+<head>
+    <title>Pac-Man</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <link rel="icon" type="image/ico" href="imagenes/pacman.ico"/>
+    <link rel="stylesheet" href="estilo/pacman.css"><!-- Hoja de estilo -->
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet"><!-- Tipografía -->
+</head>
+<!-- Carga la librería Three.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script> 
+<script>
+    /** 
+    * Three.js: PacMan.html
+    * 
+    * Se utiliza para desarrollar una aplicación web que contenga un gráfico 3D  
+    * interactivo creado con Three.js. Este gráfico implementará el juego clásico: Pac-Man
+    * 
+    */
+
+    //-- Variables globales
+    var stepX = 0;  //-- Incremento en el eje X para el movimiento de Pac-Man
+    var stepY = 0;  //-- Incremento en el eje Y para el movimiento de Pac-Man
+
+    var lastValidX = 0; //-- Posición en X de Pac-Man cuando colisiona
+    var lastValidY = 0; //-- Posición en Y de Pac-Man cuando colisiona
+
+    var lives = 3;  //-- Vidas iniciales del Pac-Man
+    var boosterActive = false;  //-- Estado del potenciador
+    var boosterDuration = 10000;    //-- Duración del potenciador en milisegundos (10 segundos)
+
+    var start = false;  //-- Estado para que los fantasmas no se muevan
+    var end = false;    //-- Estado para parar la música
+
+    //---- FUNCIONALIDAD AVANZADA ----
+    var scene;  //-- Hacemos global la escena para poder añadir las esfereas
+    var score = 0;  //-- Variable global para almacenar la puntuación
+
+    //---- MEJORAS ----
+    //-- Variables globales de los sonidos
+    var startSound, gameSound, eatGhostSound, eatBoosterSound, winSound, loseSound;
+
+    /**
+    * Esta función se usa para inicializar la escena
+    */
+    function init() {
+        //-- Crear una nueva escena
+        scene = new THREE.Scene();
+
+        //--  Obtenemos las dimensiones de la ventana del navegador para ajustar nuestra escena
+        var sceneWidth = window.innerWidth - 20;
+        var sceneHeight = window.innerHeight - 250;
+
+        //-- Crear una cámara en perspectiva con ángulo de visión de 90 grados
+        var camera = new THREE.PerspectiveCamera(90, sceneWidth / sceneHeight, 0.01, 100);
+        camera.position.set(0, 0, 30); //-- Posicionar la cámara paralela al tablero
+        camera.lookAt(scene.position);  //-- Apuntar la cámara hacia el centro de la escena
+
+        //-- Crear un renderizador WebGL con antialiasing activado
+        var renderer = new THREE.WebGLRenderer({
+            antialias : true    //-- Suaviza los bordes de los objetos
+        });
+
+        renderer.shadowMap.enabled = true;  //-- Habilitar sombras en el renderizador
+        renderer.setSize(sceneWidth, sceneHeight);  //-- Establecer tamaño del área de renderizado
+        document.body.appendChild(renderer.domElement); //-- Adjuntar el canvas del renderizador al body
+
+        //-- Obtenemos la luz de la escena
+        var light = getLight();
+
+        //-- Bordes exteriores
+        var leftBorder = getBorder("left-border", 1, 40, 2, -19.5, 0, 0);
+        var rightBorder = getBorder("right-border", 1, 40, 2, 19.5, 0, 0);
+        var topBorder = getBorder("top-border", 40, 1, 2, 0, 20, 0);
+        var downBorder = getBorder("down-border", 40, 1, 2, 0, -20, 0);
+
+        //-- Paredes pequeñas
+        var leftWallSmall = getBorder("left-wall-small", 1, 1.5, 2, -17, 0, 0);
+        var rightWallSmall = getBorder("right-wall-small", 1, 1.5, 2, 17, 0, 0);
+
+        //-- Paredes intermedias
+        var leftWallInterm = getBorder("left-wall-intermediate", 1, 30.75, 2, -14.25, 0, 0);
+        var rightWallInterm = getBorder("right-wall-intermediate", 1, 30.75, 2, 14.25, 0, 0);
+
+        var topWallIntermLeft = getBorder("top-wall-intermediate-left", 11.5, 1, 2, -9, 15.25, 0);
+        var topWallIntermRight = getBorder("top-wall-intermediate-right", 11.5, 1, 2, 9, 15.25, 0);
+
+        var downWallIntermLeft = getBorder("down-wall-intermediate-left", 11.5, 1, 2, -9, -15.25, 0);
+        var downWallIntermRight = getBorder("down-wall-intermediate-right", 11.5, 1, 2, 9, -15.25, 0);
+
+        //-- Paredes internas
+        var topWallInternal = getBorder("top-wall-internal", 20, 1, 2, 0, 10.5, 0);
+        var downWallInternal = getBorder("down-wall-internal", 20, 1, 2, 0, -10.5, 0);
+
+        var leftWallInternalTop = getBorder("left-wall-internal-top", 1, 7, 2, -9.5, 6.5, 0);
+        var leftWallInternalDown = getBorder("left-wall-internal-down", 1, 7, 2, -9.5, -6.5, 0);
+
+        var rightWallInternalTop = getBorder("right-wall-internal-top", 1, 7, 2, 9.5, 6.5, 0);
+        var rightBorderInternalDown = getBorder("right-wall-internal-down", 1, 7, 2, 9.5, -6.5, 0);
+
+        //-- Paredes de los fantasmas
+        var downGhosts = getBorder("down-ghosts", 10, 1, 2, 0, -3.5, 0);
+        var leftGhosts = getBorder("left-ghosts", 1, 6, 2, 4.5, 0, 0);
+        var rightGhosts = getBorder("right-ghosts", 1, 6, 2, -4.5, 0, 0);
+
+        //-- Potenciadores de color blanco
+        var firstBooster = getSphere("booster", -16.5, 17, 1, 0xffffff);   //-- Esquina superior izquierda
+        var secondBooster = getSphere("booster", -16.5, -17, 1, 0xffffff);  //-- Esquina inferior izquierda
+        var thirdBooster = getSphere("booster", 16.5, 17, 1, 0xffffff);   //-- Esquina superior derecha
+        var fourthBooster = getSphere("booster", 16.5, -17, 1, 0xffffff);  //-- Esquina inferior derecha
+
+        //-- Fantasmas de color rojo
+        var firstGhost = getSphere("ghost", -2, -1, 1, 0xff0000);   //-- Izquierda
+        var secondGhost = getSphere("ghost", 2, -1, 1, 0xff0000);   //-- Derecha
+        var thirdGhost = getSphere("ghost", 0, 2, 1, 0xff0000);     //-- Arriba
+
+        //-- PacMan de color amarillo
+        var pacman = getSphere("pacman", 0, -15.25, 1, 0xffff00);
+
+        //-- Obtenemos el suelo en 2D
+        var floor = getFloor();
+
+        //-- Añadimos los elemenos a la escena
+        scene.add(light);
+
+        scene.add(leftBorder);
+        scene.add(rightBorder);
+        scene.add(topBorder);
+        scene.add(downBorder);
+
+        scene.add(leftWallSmall);
+        scene.add(rightWallSmall);
+
+        scene.add(leftWallInterm);
+        scene.add(rightWallInterm);
+        scene.add(topWallIntermLeft);
+        scene.add(topWallIntermRight);
+        scene.add(downWallIntermLeft);
+        scene.add(downWallIntermRight);
+
+        scene.add(topWallInternal);
+        scene.add(downWallInternal);
+        scene.add(leftWallInternalTop);
+        scene.add(leftWallInternalDown);
+        scene.add(rightWallInternalTop);
+        scene.add(rightBorderInternalDown);
+
+        scene.add(downGhosts);
+        scene.add(leftGhosts);
+        scene.add(rightGhosts);
+
+        scene.add(firstBooster);
+        scene.add(secondBooster);
+        scene.add(thirdBooster);
+        scene.add(fourthBooster);
+        
+        scene.add(firstGhost);
+        scene.add(secondGhost);
+        scene.add(thirdGhost);
+
+        scene.add(pacman);
+        scene.add(floor);
+
+        //-- Arrays de los bordes, potenciadores, fantasmas y esferas de puntuación
+        var borders = [
+            leftBorder, rightBorder, topBorder, downBorder, leftWallSmall, rightWallSmall, leftWallInterm, rightWallInterm, topWallIntermLeft, topWallIntermRight, downWallIntermLeft, downWallIntermRight,
+            topWallInternal, downWallInternal, leftWallInternalTop, leftWallInternalDown, rightWallInternalTop, rightBorderInternalDown, downGhosts, leftGhosts, rightGhosts];
+
+        var boosters = [firstBooster, secondBooster, thirdBooster, fourthBooster];
+
+        var ghosts = [firstGhost, secondGhost, thirdGhost];
+
+        //-- Crear esferas de puntuación
+        var scoreSpheres = [
+            //-- Esferas exteriores
+            createScoreSphere(-16.5, 14.5),     //-- Desde la esquina izquierda arriba hacia abajo
+            createScoreSphere(-16.5, 12.5),
+            createScoreSphere(-16.5, 10.5),
+            createScoreSphere(-16.5, 8.5),
+            createScoreSphere(-16.5, 6.5),
+            createScoreSphere(-16.5, 4.5),
+            createScoreSphere(-16.5, 2.5),
+            createScoreSphere(-16.5, -14.5),    //-- Desde la esquina izquierda abajo hacia arriba
+            createScoreSphere(-16.5, -12.5),
+            createScoreSphere(-16.5, -10.5),
+            createScoreSphere(-16.5, -8.5),
+            createScoreSphere(-16.5, -6.5),
+            createScoreSphere(-16.5, -4.5),
+            createScoreSphere(-16.5, -2.5),
+            createScoreSphere(16.5, 14.5),      //-- Desde la esquina derecha arriba hacia abajo
+            createScoreSphere(16.5, 12.5),
+            createScoreSphere(16.5, 10.5),
+            createScoreSphere(16.5, 8.5),
+            createScoreSphere(16.5, 6.5),
+            createScoreSphere(16.5, 4.5),
+            createScoreSphere(16.5, 2.5),
+            createScoreSphere(16.5, -14.5),     //-- Desde la esquina derecha abajo hacia arriba
+            createScoreSphere(16.5, -12.5),
+            createScoreSphere(16.5, -10.5),
+            createScoreSphere(16.5, -8.5),
+            createScoreSphere(16.5, -6.5),
+            createScoreSphere(16.5, -4.5),
+            createScoreSphere(16.5, -2.5),
+
+            createScoreSphere(-14, 17),     //-- Desde la esquina izquierda arriba hacia la derecha
+            createScoreSphere(-11.5, 17),
+            createScoreSphere(-9, 17),
+            createScoreSphere(-6.5, 17),
+            createScoreSphere(-4, 17),
+            createScoreSphere(-1.5, 17),
+            createScoreSphere(1, 17),
+            createScoreSphere(3.5, 17),
+            createScoreSphere(6, 17),
+            createScoreSphere(8.5, 17),
+            createScoreSphere(11, 17),
+            createScoreSphere(13.5, 17),
+
+            createScoreSphere(-14, -17),      //-- Desde la esquina derecha arriba hacia la derecha
+            createScoreSphere(-11.5, -17),
+            createScoreSphere(-9, -17),
+            createScoreSphere(-6.5, -17),
+            createScoreSphere(-4, -17),
+            createScoreSphere(-1.5, -17),
+            createScoreSphere(1, -17),
+            createScoreSphere(3.5, -17),
+            createScoreSphere(6, -17),
+            createScoreSphere(8.5, -17),
+            createScoreSphere(11, -17),
+            createScoreSphere(13.5, -17),
+
+            //-- Esferas interiores
+            createScoreSphere(-11.5, 12.5),   //-- Esquina izquierda arriba hacia la derecha 
+            createScoreSphere(-9, 12.5),
+            createScoreSphere(-6.5, 12.5),
+            createScoreSphere(-4, 12.5),
+            createScoreSphere(-1.5, 12.5),
+            createScoreSphere(1, 12.5),
+            createScoreSphere(3.5, 12.5),
+            createScoreSphere(6, 12.5),
+            createScoreSphere(8.5, 12.5),
+            createScoreSphere(11.5, 12.5),   //-- Esquina derecha arriba
+
+            createScoreSphere(-11.5, 10),   //-- Desde la esquina izquierda arriba hacia abajo 
+            createScoreSphere(-11.5, 7.5),
+            createScoreSphere(-11.5, 5),
+            createScoreSphere(-11.5, 2.5),
+            createScoreSphere(-11.5, 0),
+            createScoreSphere(-11.5, -2.5),
+            createScoreSphere(-11.5, -5),
+            createScoreSphere(-11.5, -7.5),
+            createScoreSphere(-11.5, -10),
+
+            createScoreSphere(-11.5, -12.5),    //-- Esquina izquierda abajo hacia la derecha
+            createScoreSphere(-9, -12.5),
+            createScoreSphere(-6.5, -12.5),
+            createScoreSphere(-4, -12.5),
+            createScoreSphere(-1.5, -12.5),
+            createScoreSphere(1, -12.5),
+            createScoreSphere(3.5, -12.5),
+            createScoreSphere(6, -12.5),
+            createScoreSphere(8.5, -12.5),
+            createScoreSphere(11.5, -12.5), //-- Esquiena derecha abajo
+
+            createScoreSphere(11.5, 10),   //-- Desde la esquina derecha arriba hacia abajo 
+            createScoreSphere(11.5, 7.5),
+            createScoreSphere(11.5, 5),
+            createScoreSphere(11.5, 2.5),
+            createScoreSphere(11.5, 0),
+            createScoreSphere(11.5, -2.5),
+            createScoreSphere(11.5, -5),
+            createScoreSphere(11.5, -7.5),
+            createScoreSphere(11.5, -10),
+        ];
+
+        //-- Evento que controla la tecla presionada
+        document.onkeydown = function(e) {
+            switch(e.key) {
+                case "ArrowUp":    //-- Flecha hacia arriba
+                    stepX = 0;
+                    stepY = 0.15;
+                    break;
+                case "ArrowDown":  //-- Flecha hacia abajo
+                    stepX = 0;
+                    stepY = -0.15;
+                    break;
+                case "ArrowLeft":  //-- Flecha hacia la izquierda
+                    stepX = -0.15;
+                    stepY = 0;
+                    break;
+                case "ArrowRight":  //-- Flecha hacia la derecha
+                    stepX = 0.15;
+                    stepY = 0;
+                    break;
+            }
+            //-- Si se pulsa una de las telcas cambiamos el estado de start para que los fantasmas comiencen a moverse
+            start = true;
+        }
+
+        //-- Inicializa los sonidos
+        initSounds();
+
+        //-- Sonido de inicio
+        playStartSound();
+
+        //-- Mostrar vidas iniciales
+        updateLives();
+
+        // Crear y agregar el contenedor de estado del juego
+        createGameStatusContainer();
+
+        //-- Comenzamos la animación
+        animate(scene, camera, renderer, pacman, borders, boosters, ghosts, scoreSpheres);
+    }
+
+    /**
+     * Función para animar los elementos dentro de la escena del juego
+     * @param {THREE.Scene} scene - Escena de Three.js donde se renderizan los elementos
+     * @param {THREE.PerspectiveCamera} camera - Cámara de Three.js para visualizar la escena
+     * @param {THREE.WebGLRenderer} renderer - Renderizador WebGL para la escena
+     * @param {THREE.Mesh} pacman - Objeto de malla que representa al Pac-Man en la escena
+     * @param {THREE.Mesh[]} borders - Array de objetos de malla que representan los bordes con los que puede colisionar Pac-Man
+     * @param {THREE.Mesh[]} boosters - Array de objetos de malla que representan los potenciadores en la escena
+     * @param {THREE.Mesh[]} ghosts - Array de objetos de malla que representan los fantasmas en la escena
+     */
+    function animate(scene, camera, renderer, pacman, borders, boosters, ghosts, scoreSpheres) {
+
+        //-- Condición de ganar si se cogen todas las esferas de puntuación
+        if (scoreSpheres.length == 0) {
+            end = true; //-- Pasa a true para parar el sonido en bucle inicial
+            stopSoundLoop(gameSound);
+            stopSoundLoop(eatBoosterSound);
+            winSound.play();  //-- Al ganar suena de nuevo el sonido de la cabecera
+            updateStatusImage('win.png'); //-- Mostrar imagen de you won
+            alert("¡Has ganado!");
+            return;
+        }
+
+        //-- Colisiones del pacman con esferas de puntuación
+        for (var i = 0; i < scoreSpheres.length; i++) {
+            if (detectCollision(pacman, scoreSpheres[i])) {
+                scene.remove(scoreSpheres[i]);  //-- Eliminamos la esfera de puntuación
+                score += 10;  //-- Sumamos 10 puntos por colisionar con una esfera de puntuación
+                updateScore();  //-- Actualizamos la visualización de la puntuación
+                scoreSpheres.splice(i, 1);  //-- Eliminamos la esfera del array para evitar puntos duplicados
+                break;  //-- Salimos del bucle después de encontrar la primera colisión
+            }
+        }
+
+        //-- Colisiones del pacman con potenciadores
+        if (!boosterActive) {
+            for (var i = 0; i < boosters.length; i++) {
+                if (detectCollision(pacman, boosters[i])) {
+                    scene.remove(boosters[i]);  //-- Eliminamos el booster
+                    boosters.splice(i, 1);
+                    score += 50;  //-- Sumamos 50 puntos por colisionar con un potenciador
+                    updateScore();  //-- Actualizamos la visualización de la puntuación
+                    activateBooster(ghosts);  //-- Lo activamos
+                    break;
+                }
+            }
+        }
+
+        //-- Colisiones del pacman con fantasmas
+        for (var i = 0; i < ghosts.length; i++) {
+            if (detectCollision(pacman, ghosts[i])) {
+                if (!boosterActive) {
+                    //-- Si no hay potenciador activo, perder una vida
+                    loseSound.play();   //-- Suena el sonido de perder cuando colisiona con un fantasma y pierde una vida
+
+                    lives--;
+                    updateLives();  //-- Actualizamos las vidas
+
+                    //-- Reiniciar posición de Pac-Man
+                    pacman.position.set(0, -15.25, 1);
+                    lastValidX = 0;
+                    lastValidY = -15.25;
+
+                    //-- Si no se reinicia se mueve con la misma dirección que llevaba el pacman en la colisión con el fantasma
+                    stepX = 0;
+                    stepY = 0;
+
+                    //-- Verificar si se ha quedado sin vidas
+                    if (lives === 0) {
+                        end = true; //-- Pasa a true para parar el sonido en bucle inicial
+                        stopSoundLoop(gameSound);
+                        stopSoundLoop(eatBoosterSound);
+                        loseSound.play();   //-- Al perder suena la canción de pérdida
+                        updateStatusImage('game-over.png'); //-- Mostrar imagen de game over
+                        alert("¡Has perdido!");
+                        return;
+                    }
+
+                } else {
+                    //-- Si hay potenciador activo, eliminar fantasma
+                    //-- Suena cuando se come a los dos primeros, en el tercero suena la canción de ganar
+                    if (ghosts.length >= 2) {
+                        eatGhostSound.play();
+                    }
+
+                    scene.remove(ghosts[i]);    //-- Eliminamos al fantasmo colisionado
+                    ghosts.splice(i, 1);
+
+                    score += 200;  //-- Sumamos 200 puntos por comer un fantasma
+                    updateScore();  //-- Actualizamos la visualización de la puntuación
+
+                    //-- Verificar si se eliminaron todos los fantasmas
+                    if (ghosts.length === 0) {
+                        end = true; //-- Pasa a true para parar el sonido en bucle inicial
+                        stopSoundLoop(gameSound);
+                        stopSoundLoop(eatBoosterSound);
+                        winSound.play();  //-- Al ganar suena de nuevo el sonido de la cabecera
+                        updateStatusImage('win.png'); //-- Mostrar imagen de you won
+                        alert("¡Has ganado!");
+                        return;
+                    }
+                }
+                break;
+            }
+        }
+
+        //-- Cuando se mueva el pacman que empiecen a moverse los fantasmas
+        if (start === true) {
+            //-- Mover fantasmas
+            moveGhosts(ghosts, borders);
+        }
+
+        //-- Actualizar posición de Pac-Man
+        if (!checkCollision(pacman, borders)) {
+            //-- Si no hay colisión con los bordes, actualizar las coordenadas
+            lastValidX = pacman.position.x;
+            lastValidY = pacman.position.y;
+        } else {
+            //-- Si hay colisión, devolver Pac-Man a su última posición
+            pacman.position.x = lastValidX;
+            pacman.position.y = lastValidY;
+        }
+
+        //-- Mover Pac-Man según los teclas pulsadas
+        pacman.position.x += stepX;
+        pacman.position.y += stepY;
+
+        //-- Actualizar la escena y continuar la animación
+        renderer.render(scene, camera);
+        requestAnimationFrame(function() {
+            animate(scene, camera, renderer, pacman, borders, boosters, ghosts, scoreSpheres);
+        });
+    }
+
+    /**
+     * Función para mover los fantasmas
+     * @param {THREE.Mesh[]} ghosts - Array de objetos de malla que representan los fantasmas a mover
+     * @param {THREE.Mesh[]} borders - Array de objetos de malla que representan los bordes con los que pueden colisionar los fantasmas
+     */
+    function moveGhosts(ghosts, borders) {
+        ghosts.forEach(function(ghost) {
+            //-- Guardar posición anterior
+            var oldX = ghost.position.x;
+            var oldY = ghost.position.y;
+
+            //-- Mover fantasma
+            ghost.position.x += ghost.stepX;
+            ghost.position.y += ghost.stepY;
+
+            //-- Si el fantasma colisiona con un borde, revertir movimiento y cambiar dirección
+            if (checkCollision(ghost, borders)) {
+                ghost.position.x = oldX;
+                ghost.position.y = oldY;
+
+                //-- Elegir una nueva dirección aleatoria para moverse
+                var angle = Math.random() * 2 * Math.PI;
+                var speed = 0.15;   //-- Ajustar la velocidad aquí
+                ghost.stepX = Math.cos(angle) * speed;
+                ghost.stepY = Math.sin(angle) * speed;
+            }
+        });
+    }
+
+    /**
+     * Función para actualizar las vidas del Pac-Man en la interfaz
+     */
+    function updateLives() {
+        var livesContainer = document.getElementById("life-icons-container");
+        if (livesContainer) {
+            livesContainer.innerHTML = "";  //-- Elimina el contenido del contenedor
+            for (var i = 0; i < lives; i++) {  //-- Itera sobre el número de vidas restantes
+                var life = document.createElement("img");  //-- Crea un nuevo elemento de imagen
+                life.src = "imagenes/pacman.png";  //-- Establece la dirección de la imagen del Pac-Man
+                life.alt = "Pac-Man Life";  // Establece el texto alternativo de la imagen
+                life.classList.add("life-icon");  // Añade la clase CSS 'life-icon' al elemento de imagen
+                livesContainer.appendChild(life);  // Añade la imagen al contenedor
+            }
+        }
+    }
+
+    /**
+     * Función que activa los potenciadores
+     * @param {THREE.Mesh[]} ghosts - Array de objetos de malla que representan los fantasmas
+     */
+    function activateBooster(ghosts) {
+
+        boosterActive = true;   //-- Si se activa, se pueden eliminar los fantasmas
+
+        startSound.volume = 0.0;
+        gameSound.volume = 0.0;
+        eatBoosterSound.play();
+
+        //-- Cambiar el color de todos los fantasmas a verde
+        for (var i = 0; i < ghosts.length; i++) {
+            ghosts[i].material.color.setHex(0x00ff00);
+        }
+
+        setTimeout(function() {
+            boosterActive = false;  //-- No se pueden eliminar los fantasmas
+            gameSound.volume = 0.5;
+            eatBoosterSound.pause();
+            
+            //-- Cambiar el color de todos los fantasmas a rojo
+            for (var i = 0; i < ghosts.length; i++) {
+                ghosts[i].material.color.setHex(0xff0000);
+            }
+        }, boosterDuration);
+    }
+
+    /**
+     * Función que detecta si existe una colisión de las esferas con los bordes
+     * @param {THREE.Mesh} sphere - El objeto de malla que representa la esfera
+     * @param {THREE.Mesh[]} borders - Array de objetos de malla que representan los bordes
+     * @returns {boolean} - Devuelve true si hay una colisión con algún borde, de lo contrario false
+     */
+    function checkCollision(sphere, borders) {
+        //-- Itera sobre todos los bordes
+        for (var i = 0; i < borders.length; i++) {
+            //-- Llama a la función detectCollision para verificar la colisión entre la esfera y el borde
+            if (detectCollision(sphere, borders[i])) {
+                //-- Si se detecta una colisión, devuelve true
+                return true;
+            }
+        }
+        //-- Si no se encuentra ninguna colisión con ninguno de los bordes, devuelve false
+        return false;
+    }
+
+    /**
+     * Función que detecta si existe una colisión con el Pac-Man y otros objetos
+     * @param {THREE.Mesh} pacman - El objeto de malla que representa a Pac-Man
+     * @param {THREE.Mesh} object - El objeto de malla con el que se va a comprobar la colisión
+     * @returns {boolean} - Devuelve true si hay una colisión, de lo contrario false
+     */
+    function detectCollision(pacman, object) {
+        //--Crear un bounding box (caja delimitadora) para el pacman y el objeto dado
+        var pacmanBB = new THREE.Box3().setFromObject(pacman);
+        var objectBB = new THREE.Box3().setFromObject(object);
+        
+        //-- Verificar si los bounding boxes de pacman y el objeto se intersectan
+        return pacmanBB.intersectsBox(objectBB);
+    }
+
+    /**
+     * Función para obtener la luz ambiental
+     */
+    function getLight() {
+        //-- Crear una luz ambiental con color blanco con intensidad 0.5
+        var light = new THREE.AmbientLight(0xffffff, 0.5);
+        
+        //-- Crear una luz direccional con color blanco con intensidad 1
+        var spotLight = new THREE.DirectionalLight(0xffffff, 1);
+        
+        //-- Establecer la posición de la luz direccional en el espacio 3D
+        spotLight.position.set(100, 100, 200);
+        
+        //-- Habilitar el lanzamiento de sombras desde la luz direccional
+        spotLight.castShadow = true;
+
+        //-- Configurar el tamaño del mapa de sombras (textura de sombra)
+        spotLight.shadow.mapSize.width = 1024;
+        spotLight.shadow.mapSize.height = 1024;
+
+        //-- Definir los límites de la cámara de sombras
+        var d = 100; // Distancia desde el origen
+        spotLight.shadow.camera.left = -d;
+        spotLight.shadow.camera.right = d;
+        spotLight.shadow.camera.top = d;
+        spotLight.shadow.camera.bottom = -d;
+
+        //-- Añadir la luz direccional como parte de la luz ambiental
+        light.add(spotLight);
+
+        //-- Devolver la luz ambiental
+        return light;
+    }
+
+    /**
+     * Función para obtener los bordes
+     * @param {string} name - El nombre o identificador del borde
+     * @param {number} width - La anchura del borde
+     * @param {number} height - La altura del borde
+     * @param {number} depth - La profundidad del borde
+     * @param {number} x - La coordenada x de la posición del borde
+     * @param {number} y - La coordenada y de la posición del borde
+     * @param {number} z - La coordenada z de la posición del borde
+     * @returns {THREE.Mesh} - La malla que representa el borde
+     */
+    function getBorder(name, width, height, depth, x, y, z) {
+        var geometry = new THREE.BoxGeometry(width, height, depth);     //-- Crea el borde con las dimensiones pasadas por parámetro
+        var material = new THREE.MeshPhongMaterial({ color: 0x0000ff });    //-- Color azúl eléctrico para los bordes
+        var border = new THREE.Mesh(geometry, material);    //-- Crear el objeto de malla (mesh) que representa el borde
+
+        //-- Establecer la posición del borde
+        border.position.set(x, y, z);
+
+        //-- Asignar un nombre al borde para identificarlo
+        border.name = name;
+
+        //-- Devolver el borde
+        return border;
+    }
+
+    /**
+    * Función para obtener el suelo
+    */
+    function getFloor() {
+        var geometry = new THREE.PlaneGeometry(40, 40);     //-- Crea el suelo de 40x40
+        var material = new THREE.MeshPhongMaterial({    //-- Crear el suelo de color negro y renderizado en ambos lados
+            color: 0x111111,
+            side: THREE.DoubleSide
+        });
+
+        //-- Crear el objeto de malla (mesh) que representa el suelo
+        var floor = new THREE.Mesh(geometry, material);
+
+        floor.rotation.x = Math.PI / 2; //-- Rotar el suelo alrededor del eje X para que sea horizontal
+        floor.position.y = 0;   //-- Establecer la posición del suelo en el eje Y
+
+        //-- Devolver el suelo
+        return floor;
+    }
+
+    /**
+     * Función para obtener los objetos esféricos
+     * @param {string} name - El nombre o identificador de la esfera
+     * @param {number} x - La coordenada x de la posición de la esfera
+     * @param {number} y - La coordenada y de la posición de la esfera
+     * @param {number} z - La coordenada z de la posición de la esfera y el radio de la esfera
+     * @param {string} color - El color de la esfera en formato hexadecimal
+     * @returns {THREE.Mesh} - La malla que representa la esfera
+     */
+    function getSphere(name, x, y, z, color) {
+        var geometry = new THREE.SphereGeometry(z, 32, 32);     //-- Crear la esfera de tamaño 32x32 y profundidad z
+        var material = new THREE.MeshPhongMaterial({ color: color });   //-- Crea la esfera del color pasado por parámetro
+        var sphere = new THREE.Mesh(geometry, material);    //-- Crear el objeto de malla (mesh) que representa la esfera
+
+        sphere.position.set(x, y, z);   //-- Establecer la posición de la esfera
+        sphere.name = name;     //-- Identificador de la esfera
+
+        //-- Devolver la esfera
+        return sphere;
+    }
+
+    /**
+     * Función que inicializa los sonidos
+     */ 
+    function initSounds() {
+        startSound = new Audio('sonidos/start.wav');
+        gameSound = new Audio('sonidos/soundgame.wav');
+        eatGhostSound = new Audio('sonidos/eat_ghost.wav');
+        eatBoosterSound = new Audio('sonidos/eat_booster.wav');
+        winSound = new Audio('sonidos/win.wav');
+        loseSound = new Audio('sonidos/lose.wav');
+
+        gameSound.loop = true;  //-- Establecemos el sonido del juego en bucle
+        eatBoosterSound.loop = true;   //-- Establecemos el sonido de la activación de los potenciadores en bucle
+    }
+
+    /**
+     * Función para reproducir el primer sonido y luego el del juego en bucle
+     */
+    function playStartSound() {
+        updateStatusImage('ready.png'); //-- Añade la imagen de ready mientras suena la primera canción
+        startSound.play();
+        startSound.onended = function() {
+            if (end === true) {
+                gameSound.pause();
+            } else {
+                gameSound.play();
+            }
+            updateStatusImage(''); //-- No muestres nada
+        };
+    }
+
+    /**
+     * Función para detener el bucle y pausar el sonido
+     * @param {Audio} sound - El objeto de sonido que se quiere detener
+     */
+    function stopSoundLoop(sound) {
+        sound.loop = false; //-- Desactivar el bucle
+        sound.pause();      //-- Pausar el sonido
+        sound.currentTime = 0; //-- Reiniciar el tiempo de reproducción al inicio
+    }
+
+    /**
+     * Función para crear y agregar el contenedor de estado del juego al documento
+     */
+    function createGameStatusContainer() {
+        var gameStatusContainer = document.createElement('div');
+        gameStatusContainer.id = 'game-status-container';
+        var statusImage = document.createElement('img');
+        statusImage.id = 'status-image';
+        statusImage.src = '';
+        statusImage.alt = 'Game Status';
+        statusImage.style.display = 'none';
+        gameStatusContainer.appendChild(statusImage);
+        document.body.appendChild(gameStatusContainer);
+    }
+
+    /**
+     * Función para actualizar la imagen de estado del juego
+     * @param {string} imageName - El nombre de la imagen que se quiere mostrar
+     */
+    function updateStatusImage(imageName) {
+        var statusImage = document.getElementById('status-image');
+        if (imageName) {
+            statusImage.src = 'imagenes/' + imageName; //-- Establecer la fuente de la imagen
+            statusImage.style.display = 'block'; //-- Mostrar la imagen
+        } else {
+            statusImage.style.display = 'none'; //-- Ocultar la imagen si no hay nombre
+        }
+    }
+
+    /**
+     * Función para crear una esfera de puntuación en la posición dada
+     * @param {number} x - Coordenada x de la posición de la esfera
+     * @param {number} y - Coordenada y de la posición de la esfera
+     * @returns {THREE.Mesh} - La esfera de puntuación como objeto de malla de Three.js
+     */
+    function createScoreSphere(x, y) {
+        var geometry = new THREE.SphereGeometry(0.5, 32, 32);   //-- Geometría de la esfera de puntuación
+        var material = new THREE.MeshPhongMaterial({ color: 0xffffff });   //-- Material blanco para la esfera
+        var sphere = new THREE.Mesh(geometry, material);   //-- Crear la esfera
+        sphere.position.set(x, y, 1);   //-- Establecer posición
+        scene.add(sphere);   //-- Añadir a la escena
+        return sphere;   //-- Devolver la esfera creada
+    }
+
+    /**
+     * Función para actualizar la puntuación en la interfaz
+     */
+    function updateScore() {
+        var scoreElement = document.getElementById("score");
+        if (scoreElement) {
+            scoreElement.innerText = score;  //-- Actualizamos el texto de la puntuación
+        }
+    }
+
+</script>
+
+<body onload="init()">
+    <img class="titulo" src="imagenes/titulo-pacman.png" alt="Título: Pac-Man">
+    <div id="lives">
+        <div id="game-status-container">
+            <img id="status-image" src="" alt="Game Status">
+        </div>
+
+        <img class="titulo-lives" src="imagenes/title-lives.png" alt="Lives: ">
+        <div id="life-icons-container"></div>
+
+        <img class="score-icon" src="imagenes/score.png" alt="Score Icon">
+        <div id="score">0</div>
+    </div>
+</body>
+
+</html>
