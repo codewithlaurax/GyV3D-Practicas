@@ -147,18 +147,30 @@
             return;
         }
 
-        var image0 = new Image();
-        image0.src = 'portal.jpg';
-        var image1 = new Image();
-        image1.src = 'light.jpg';
-        image0.onload = function () {
-            loadTexture(gl, "u_Sampler0", image0, 0, true, decoration);
-            image1.onload = function () {
-                loadTexture(gl, "u_Sampler1", image1, 1, true, decoration);
+        // CORRECCIÓN: cada imagen tiene su propio onload. Antes el de light.jpg se asignaba dentro
+        // del de portal.jpg, así que si light.jpg terminaba antes nunca se dibujaba la escena.
+        var pendientes = 2;
+        function imagenLista() {
+            pendientes--;
+            if (pendientes === 0) {
                 texturasCargadas = true;
                 drawScene(rotate, speed, primitive);
             }
         }
+
+        var image0 = new Image();
+        image0.onload = function () {
+            loadTexture(gl, "u_Sampler0", image0, 0, true, decoration);
+            imagenLista();
+        };
+        image0.src = 'portal.jpg';
+
+        var image1 = new Image();
+        image1.onload = function () {
+            loadTexture(gl, "u_Sampler1", image1, 1, true, decoration);
+            imagenLista();
+        };
+        image1.src = 'light.jpg';
     }
 
     // Asigna las unidades de textura a los samplers según la decoración (igual que loadTexture)
