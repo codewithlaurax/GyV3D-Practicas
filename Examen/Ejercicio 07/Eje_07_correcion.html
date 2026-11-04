@@ -1,0 +1,531 @@
+<!-- Se tiene que ejecutar: python3 -m http.server 8080 -->
+
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Ejercicio 7. Iluminación con WebGL</title>
+    <meta charset="UTF-8">
+</head>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gl-matrix/3.4.2/gl-matrix-min.js"></script>
+
+<script id="shaderVs" type="x-shader/x-vertex">
+    attribute vec4 a_Position;
+    attribute vec2 a_TexCoord;
+    varying vec2 v_TexCoord;
+
+    uniform mat4 u_pMatrix;
+    uniform mat4 u_vMatrix;
+    uniform mat4 u_mvMatrix;
+
+    uniform mat4 u_NormalMatrix;
+    attribute vec3 a_Normal;
+
+    varying highp vec4 v_Normal;
+
+    void main() {
+        gl_Position = u_pMatrix * u_vMatrix * u_mvMatrix * a_Position;
+        v_TexCoord = a_TexCoord;
+        v_Normal = u_NormalMatrix * vec4(a_Normal, 1.0);
+    }
+</script>
+
+<script id="shaderFs" type="x-shader/x-fragment">
+    precision mediump float;
+    uniform sampler2D u_Sampler0;
+    uniform sampler2D u_Sampler1;
+    varying vec2 v_TexCoord;
+
+    uniform vec3 u_AmbientLight;
+    uniform vec3 u_LightColor;
+    uniform vec3 u_LightDirection;
+    
+    varying highp vec4 v_Normal;
+    void main(void) {
+        vec4 color0 = texture2D(u_Sampler0, v_TexCoord);
+        vec4 color1 = texture2D(u_Sampler1, v_TexCoord);
+
+        // Ejercicio 3: Degradado realista
+        float nDotL = max(dot(u_LightDirection,normalize(v_Normal.xyz)),0.0);
+        
+        vec3 diffuse = u_LightColor * (color0.rgb * color1.rgb) * nDotL;
+        vec3 ambient = (u_AmbientLight * color0.rgb) + (u_AmbientLight * color1.rgb);
+
+        gl_FragColor = vec4(diffuse + ambient, (color1.a * color0.a));
+    }
+</script>
+
+<script>
+    // Variables globales
+    var gl;
+    var count = 0;
+    var y = -0.3;
+    var z = 3;
+    var luzAmbiente = 0.2;
+    var preMatrix, globalMatrix;
+
+    // Event listener for mouse wheel
+    document.addEventListener('wheel', function (event) {
+    if (document.querySelector('input[name="projection"]:checked').value == "perspective") {
+        z = event.wheelDelta > 0 ? z - 1: z + 1; }
+    });
+
+
+    // Event listener for up and down
+    document.onkeydown = function (ev) {
+        var step = new Number(document.getElementById("step").value);
+        switch (ev.keyCode) {
+            case 38: // Up
+                y = y + step;
+                break;
+            case 40: // Down
+                y = y - step;
+                break;
+            }
+    }
+    
+    function init() {
+        // Get canvas object from the DOM
+        canvas = document.getElementById("myCanvas");
+
+        // Init WebGL context
+        gl = canvas.getContext("webgl");
+        if (!gl) {
+            console.log("Failed to get the rendering context for WebGL");
+            return;
+        }
+
+        // Init shaders
+        var vs = document.getElementById('shaderVs').innerHTML;
+        var fs = document.getElementById('shaderFs').innerHTML;
+        if (!initShaders(gl, vs, fs)) {
+            console.log('Failed to intialize shaders.');
+            return;
+        }
+
+        // Init vertex shader
+        initVertexShader(gl);
+
+        // Initialize matrix
+        preMatrix = glMatrix.mat4.create();
+        globalMatrix = glMatrix.mat4.create();
+
+        // Handle
+        handle();   
+    }
+
+    function handle() {
+        // Variables de la interfaz
+        var rotationChecked = document.querySelector('input[name="rotation"]:checked');
+        var primitiveValue = document.querySelector('input[name="primitive"]:checked').value;
+        var projectionValue = document.querySelector('input[name="projection"]:checked').value;
+        var speed = document.getElementById("speed").value;
+        var decoration = document.querySelector('input[name="decoration"]:checked').value;
+
+        // Init projection matrix
+        initProjection(gl, canvas, projectionValue, step);
+
+        // Set clear canvas color
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);
+
+        // Hidden surface removal
+        gl.enable(gl.DEPTH_TEST);
+        
+        // Init textures
+        initTexturesAndDraw(rotationChecked, speed, primitiveValue, decoration);
+    }
+
+    // This function is used to initialize textures and draw the scene
+    function initTexturesAndDraw(rotate, speed, primitive, decoration) {
+        var image0 = new Image();
+        image0.src = 'portal.jpg';
+        var image1 = new Image();
+        image1.src = 'light.jpg';
+        image0.onload = function () {
+            loadTexture(gl, "u_Sampler0", image0, 0, true, decoration);
+            image1.onload = function () {
+                loadTexture(gl, "u_Sampler1", image1, 1, true, decoration);
+                drawScene(rotate, speed, primitive);
+            }
+        }
+    }
+
+    // This function is used to check if a number is a power of 2
+    function isPowerOf2(value) {
+        return (value & (value - 1)) == 0;
+    }
+
+    // This function is used to load a texture
+    function loadTexture(gl, samplerUniform, image, unitNumber, flip, decoration) {
+        // Flip the image's y axis
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, flip);
+
+        // Activate and configure texture
+        gl.activeTexture(gl.TEXTURE0 + unitNumber);
+        gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+
+        // Check if the image is a power of 2 in both dimensions.
+        if (isPowerOf2(image.width) && isPowerOf2(image.height)) {
+            // Yes, it's a power of 2. Generate mips.
+            gl.generateMipmap(gl.TEXTURE_2D);
+        } else {
+            // No, it's not a power of 2. Turn off mips and set wrapping to clamp to edge
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        }
+
+        // Set texture to the sampler based on decoration value
+        var samplerLocation = gl.getUniformLocation(gl.program, samplerUniform);
+        if (decoration === 'no') {
+            gl.uniform1i(samplerLocation, 0); // Asignar el número de unidad de textura al sampler uniforme
+        } else if (decoration === 'yes') {
+            gl.uniform1i(samplerLocation, unitNumber); // Asignar el número de unidad de textura al sampler uniforme
+        }
+    }
+
+    
+    function drawScene(rotate, speed, primitive) {
+        // Clear
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        
+        // Condición para la rotación
+        if (rotate?.value == "on") {
+            globalMatrix = glMatrix.mat4.fromYRotation(globalMatrix, count);
+            var uMvMatrix = gl.getUniformLocation(gl.program, "u_mvMatrix");
+            gl.uniformMatrix4fv(uMvMatrix, false, globalMatrix);
+            // Update global matrix with rotation
+            glMatrix.mat4.multiply(globalMatrix, preMatrix, globalMatrix);
+
+            // Incremento de la posición
+            count += 0.01 * speed;
+        } else {
+            // Almacena la última matriz cuando la rotación se detiene
+            preMatrix = glMatrix.mat4.clone(preMatrix, globalMatrix);
+            var uMvMatrix = gl.getUniformLocation(gl.program, "u_mvMatrix");
+            gl.uniformMatrix4fv(uMvMatrix, false, globalMatrix);
+        }
+
+        // Get the normal direction using the model Matrix
+		var normalMatrix = glMatrix.mat4.clone(globalMatrix);
+		var normalMatrixInvert = glMatrix.mat4.invert(glMatrix.mat4.create(), normalMatrix);
+		var normalMatrixInvertTranspose = glMatrix.mat4.transpose(glMatrix.mat4.create(), normalMatrixInvert);
+		var normalUniformMatrix = gl.getUniformLocation(gl.program, "u_NormalMatrix");
+		gl.uniformMatrix4fv(normalUniformMatrix, false, normalMatrixInvertTranspose);
+
+        // Condición para pintar líneas o triángulos según lo elegido en la interfaz
+        if (primitive == "lines") {
+            gl.drawElements(gl.LINES, 30 * 3, gl.UNSIGNED_SHORT, 0);
+        } else if (primitive == "triangles") {
+            gl.drawElements(gl.TRIANGLES, 30 * 3, gl.UNSIGNED_SHORT, 0);
+        }
+
+        //-- Ejercicio 1: Ajuste del color de la luz mediante delizadores de la interfaz
+        // Write u_LightColor
+        var lightR = document.getElementById("r").value;
+		var lightG = document.getElementById("g").value;
+		var lightB = document.getElementById("b").value;
+		var lightColor = [lightR, lightG, lightB];
+		var lightColorUniform = gl.getUniformLocation(gl.program, "u_LightColor");
+		gl.uniform3fv(lightColorUniform, lightColor);
+
+        //-- Ejercicio 2: Ajuste de la luz ambiental mediante teclas + y -
+        document.onkeydown = function (ev) {
+            switch (ev.key) {
+                case "+": // Incrementa 0.1 hasta 1
+                    luzAmbiente += 0.1;
+                    console.log(luzAmbiente);
+                    break;
+                case '-': // Decrementa 0.1 hasta 0
+                    luzAmbiente -= 0.1;
+                    console.log(luzAmbiente);
+                    break;
+                }
+        }
+
+        //-- Condiciones para que no se salga del rango de 0 y 1
+        // Write u_AmbientLight
+        if (luzAmbiente <= 0) {
+            luzAmbiente = 0;
+        } else if (luzAmbiente >= 1) {
+            luzAmbiente = 1;
+        }
+
+        var ambientLight = [luzAmbiente, luzAmbiente, luzAmbiente];
+        var ambientLightUniform = gl.getUniformLocation(gl.program, "u_AmbientLight");
+        gl.uniform3fv(ambientLightUniform, ambientLight);   
+
+        // Write u_LightDirection
+		var lightX = document.getElementById("x").value;
+		var lightY = document.getElementById("y").value;
+		var lightZ = document.getElementById("z").value;
+		var lightDirection = [lightX, lightY, lightZ];
+		glMatrix.vec3.normalize(lightDirection, lightDirection);
+		var lightDirectionUniform = gl.getUniformLocation(gl.program, "u_LightDirection");
+		gl.uniform3fv(lightDirectionUniform, lightDirection);
+
+        // Para que la animación se repita
+        requestAnimationFrame(handle);
+    }
+
+    function initVertexShader(gl) {
+        // Vertexes, colors and noramls box (X, Y, Z, R, G, B, normal(X,Y,Z))
+        var vertexesAndColors = [
+            // Columna izquierda (6 caras formadas por dos triángulos)
+            // Back - Blue 
+            -0.55, -0.75, -0.2,     0.0, 0.5,       0.0, 0.0, -1.0, // v0
+            -0.25, -0.75, -0.2,     0.5, 0.5,       0.0, 0.0, -1.0, // v1 
+            -0.25, 0.0, -0.2,       0.5, 1.0,       0.0, 0.0, -1.0, // v2 
+            -0.55, 0.0, -0.2,       0.0, 1.0,       0.0, 0.0, -1.0, // v3 
+            // Front - Red 
+            -0.55, -0.75, 0.2,      0.5, 0.0,       0.0, 0.0, 1.0, // v4 
+            -0.25, -0.75, 0.2,      1.0, 0.0,       0.0, 0.0, 1.0, // v5 
+            -0.25, 0.0, 0.2,        1.0, 0.5,       0.0, 0.0, 1.0, // v6 
+            -0.55, 0.0, 0.2,        0.5, 0.5,       0.0, 0.0, 1.0, // v7 
+            // Left – Yellow 
+            -0.55, -0.75, -0.2,     0.5, 0.5,       -1.0, 0.0, 0.0, // v8 
+            -0.55, 0.0, -0.2,       0.5, 1.0,       -1.0, 0.0, 0.0, // v9 
+            -0.55, 0.0, 0.2,        0.0, 1.0,       -1.0, 0.0, 0.0, // v10 
+            -0.55, -0.75, 0.2,      0.0, 0.5,       -1.0, 0.0, 0.0, // v11
+            // Right - Green 
+            -0.25, -0.75, -0.2,     0.5, 0.5,       1.0, 0.0, 0.0, // v12 
+            -0.25, 0.0, -0.2,       0.5, 1.0,       1.0, 0.0, 0.0, // v13 
+            -0.25, 0.0, 0.2,        0.0, 1.0,       1.0, 0.0, 0.0, // v14 
+            -0.25, -0.75, 0.2,      0.0, 0.5,       1.0, 0.0, 0.0, // v15 
+            // Bottom - Light Blue 
+            -0.55, -0.75, -0.2,     0.0, 1.0,       0.0, -1.0, 0.0, // v16
+            -0.55, -0.75, 0.2,      0.0, 0.9,       0.0, -1.0, 0.0, // v17 
+            -0.25, -0.75, 0.2,      0.1, 0.9,       0.0, -1.0, 0.0, // v18 
+            -0.25, -0.75, -0.2,     0.1, 1.0,       0.0, -1.0, 0.0, // v19 
+            // Top - Light Blue 
+            -0.55, 0.0, -0.2,       0.0, 1.0,       0.0, 1.0, 0.0, // v20
+            -0.55, 0.0, 0.2,        0.0, 0.9,       0.0, 1.0, 0.0, // v21 
+            -0.25, 0.0, 0.2,        0.1, 0.9,       0.0, 1.0, 0.0, // v22 
+            -0.25, 0.0, -0.2,       0.1, 1.0,       0.0, 1.0, 0.0, // v23 
+
+            // Columna derecha (6 caras formadas por dos triángulos)
+            // Back - Blue 
+            0.25, -0.75, -0.2,      0.0, 0.5,       0.0, 0.0, -1.0, // v24
+            0.55, -0.75, -0.2,      0.5, 0.5,       0.0, 0.0, -1.0, // v25
+            0.55, 0.0, -0.2,        0.5, 1.0,       0.0, 0.0, -1.0, // v26
+            0.25, 0.0, -0.2,        0.0, 1.0,       0.0, 0.0, -1.0, // v27
+            // Front - Red
+            0.25, -0.75, 0.2,       0.5, 0.0,       0.0, 0.0, 1.0, // v28
+            0.55, -0.75, 0.2,       1.0, 0.0,       0.0, 0.0, 1.0, // v29
+            0.55, 0.0, 0.2,         1.0, 0.5,       0.0, 0.0, 1.0, // v30
+            0.25, 0.0, 0.2,         0.5, 0.5,       0.0, 0.0, 1.0, // v31
+            // Left – Yellow 
+            0.25, -0.75, -0.2,      0.5, 0.5,       -1.0, 0.0, 0.0, // v32
+            0.25, 0.0, -0.2,        0.5, 1.0,       -1.0, 0.0, 0.0, // v33
+            0.25, 0.0, 0.2,         0.0, 1.0,       -1.0, 0.0, 0.0, // v34
+            0.25, -0.75, 0.2,       0.0, 0.5,       -1.0, 0.0, 0.0, // v35
+            // Right - Green 
+            0.55, -0.75, -0.2,      0.5, 0.5,       1.0, 0.0, 0.0, // v36 
+            0.55, 0.0, -0.2,        0.5, 1.0,       1.0, 0.0, 0.0, // v37 
+            0.55, 0.0, 0.2,         0.0, 1.0,       1.0, 0.0, 0.0, // v38 
+            0.55, -0.75, 0.2,       0.0, 0.5,       1.0, 0.0, 0.0, // v39 
+            // Bottom - Light Blue
+            0.25, -0.75, -0.2,      0.0, 1.0,       0.0, -1.0, 0.0, // v40
+            0.25, -0.75, 0.2,       0.0, 0.9,       0.0, -1.0, 0.0, // v41 
+            0.55, -0.75, 0.2,       0.1, 0.9,       0.0, -1.0, 0.0, // v42 
+            0.55, -0.75, -0.2,      0.1, 1.0,       0.0, -1.0, 0.0, // v43 
+            // Top - Light Blue 
+            0.25, 0.0, -0.2,        0.0, 1.0,       0.0, 1.0, 0.0, // v44
+            0.25, 0.0, 0.2,         0.0, 0.9,       0.0, 1.0, 0.0, // v45 
+            0.55, 0.0, 0.2,         0.1, 0.9,       0.0, 1.0, 0.0, // v46 
+            0.55, 0.0, -0.2,        0.1, 1.0,       0.0, 1.0, 0.0, // v47
+
+            // Tejado (4 triángulos + 2 de la base = 6 triángulos)
+            // Back - Blue
+            0.0, 0.5, 0.0,          0.25, 0.5,      0.0, 0.0, -1.0, // v48
+            -0.70, 0.0, -0.6,       0.0, 0.0,       0.0, 0.0, -1.0, // v49
+            0.70, 0.0, -0.6,        0.5, 0.0,       0.0, 0.0, -1.0, // v50
+            // Front - Red
+            0.0, 0.5, 0.0,          0.75, 1.0,      0.0, 0.0, 1.0, // v51
+            -0.70, 0.0, 0.6,        0.5, 0.5,       0.0, 0.0, 1.0, // v52
+            0.70, 0.0, 0.6,         1.0, 0.5,       0.0, 0.0, 1.0, // v53
+            // Left - Yellow
+            0.0, 0.5, 0.0,          0.25, 0.5,      -1.0, 0.0, 0.0, // v54
+            -0.70, 0.0, -0.6,       0.0, 0.0,       -1.0, 0.0, 0.0, // v55
+            -0.70, 0.0, 0.6,        0.5, 0.0,       -1.0, 0.0, 0.0, // v56
+            // Right - Green
+            0.0, 0.5, 0.0,          0.25, 0.5,      1.0, 0.0, 0.0, // v57
+            0.70, 0.0, 0.6,         0.0, 0.0,       1.0, 0.0, 0.0, // v58
+            0.70, 0.0, -0.6,        0.5, 0.0,       1.0, 0.0, 0.0, // v59
+            // Bottom - Light Blue
+            -0.70, 0.0, -0.6,       0.0, 0.0,       0.0, -1.0, 0.0, // v60
+            -0.70, 0.0, 0.6,        0.0, 0.5,       0.0, -1.0, 0.0, // v61
+            0.70, 0.0, 0.6,         0.5, 0.5,       0.0, -1.0, 0.0, // v62
+            0.70, 0.0, -0.6,        0.5, 0.0,       0.0, -1.0, 0.0  // v63
+        ];
+
+        // Indexes (for drawing squares using triangles)
+        var indexes = [
+            // Columna izquierda
+            0, 1, 2,
+            0, 2, 3,
+
+            4, 5, 6,
+            4, 6, 7,
+
+            8, 9, 10,
+            8, 10, 11,
+
+            12, 13, 14,
+            12, 14, 15,
+
+            16, 17, 18,
+            16, 18, 19,
+
+            20, 21, 22,
+            20, 22, 23,
+
+            // Columna derecha
+            24, 25, 26,
+            24, 26, 27,
+
+            28, 29, 30,
+            28, 30, 31,
+
+            32, 33, 34,
+            32, 34, 35,
+
+            36, 37, 38,
+            36, 38, 39, 
+
+            40, 41, 42,
+            40, 42, 43,
+
+            44, 45, 46,
+            44, 46, 47,
+
+            // Tejado
+            48, 49, 50,
+            51, 52, 53,
+            54, 55, 56,
+            57, 58, 59,
+
+            60, 61, 62,
+            60, 62, 63
+        ];
+
+        // Write a_Position and a_Color using gl.ARRAY_BUFFER
+        gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexesAndColors), gl.STATIC_DRAW);
+
+        var vertexPositionAttribute = gl.getAttribLocation(gl.program, "a_Position");
+        gl.enableVertexAttribArray(vertexPositionAttribute);
+        gl.vertexAttribPointer(vertexPositionAttribute, 3, gl.FLOAT, false, 4 * (3 + 2 + 3), 0);
+
+        var vertexTextureAttribute = gl.getAttribLocation(gl.program, "a_TexCoord");
+        gl.enableVertexAttribArray(vertexTextureAttribute);
+        gl.vertexAttribPointer(vertexTextureAttribute, 2, gl.FLOAT, false,  4 * (3 + 2 + 3), 4 * 3);
+
+        var vertexNormalAttribute = gl.getAttribLocation(gl.program, "a_Normal");
+		gl.enableVertexAttribArray(vertexNormalAttribute);
+		gl.vertexAttribPointer(vertexNormalAttribute, 3, gl.FLOAT, false, 4 * (3 + 2 + 3), (3 + 2) * 4);
+
+        // Write indexes in gl.ELEMENT_ARRAY_BUFFER
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.createBuffer());
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indexes), gl.STATIC_DRAW);
+    }
+
+    /**
+     * This function is used to convert degrees to radians
+     * @param {Number} d 
+	 * @returns {Number}
+     */
+    function toRadian(g){
+        return g*Math.PI/180;
+    }
+
+    function initProjection(gl, canvas, projection, step) {
+        // Según la projección elegida en la interfaz
+        if (projection == "perspective") {
+            // Write u_pMatrix
+            var pMatrixUniform = gl.getUniformLocation(gl.program, "u_pMatrix");
+            var ratio = canvas.width / canvas.height;
+            var pMatrix = glMatrix.mat4.perspective(glMatrix.mat4.create(), toRadian(60), ratio, 0.1, 100);
+            gl.uniformMatrix4fv(pMatrixUniform, false, pMatrix);
+
+            // Write u_vMatrix
+            var vMatrixUniform = gl.getUniformLocation(gl.program, "u_vMatrix");
+            var vMatrix = glMatrix.mat4.lookAt(glMatrix.mat4.create(), [0, y, z], [0, 0, 0], [0, 1, 0]);
+            gl.uniformMatrix4fv(vMatrixUniform, false, vMatrix);
+        } else if (projection =="orthographic") {
+            // Write u_pMatrix
+            var pMatrixUniform = gl.getUniformLocation(gl.program, "u_pMatrix");
+            var ratio = canvas.width / canvas.height;
+            var pMatrix = glMatrix.mat4.ortho(glMatrix.mat4.create(), -ratio, ratio, -1.0, 1.0, -1.0, 1.0);
+            gl.uniformMatrix4fv(pMatrixUniform, false, pMatrix);
+
+            // Write u_vMatrix
+            var vMatrixUniform = gl.getUniformLocation(gl.program, "u_vMatrix");
+            gl.uniformMatrix4fv(vMatrixUniform, false, glMatrix.mat4.create());
+        }
+    }
+
+    function initShaders(gl, vs_source, fs_source) {
+        // Compile shaders
+        var vertexShader = makeShader(gl, vs_source, gl.VERTEX_SHADER);
+        var fragmentShader = makeShader(gl, fs_source, gl.FRAGMENT_SHADER);
+
+        // Create program
+        var glProgram = gl.createProgram();
+
+        // Attach and link shaders to the program
+        gl.attachShader(glProgram, vertexShader);
+        gl.attachShader(glProgram, fragmentShader);
+        gl.linkProgram(glProgram);
+        if (!gl.getProgramParameter(glProgram, gl.LINK_STATUS)) {
+            alert("Unable to initialize the shader program");
+            return false;
+        }
+
+        // Use program
+        gl.useProgram(glProgram);
+        gl.program = glProgram;
+
+        return true;
+    }
+
+    function makeShader(gl, src, type) {
+        var shader = gl.createShader(type);
+        gl.shaderSource(shader, src);
+        gl.compileShader(shader);
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+            alert("Error compiling shader: " + gl.getShaderInfoLog(shader));
+            return;
+        }
+        return shader;
+    }
+</script>
+
+<body onload="init()">
+    <canvas id="myCanvas" width="640" height="480"></canvas><br>
+    Step: <input type="text" value="0.01" id="step"><br>
+    <b>Rotation</b>
+    <input type="checkbox" name="rotation" checked>
+    <input type="range" id="speed" min="1" max="3" value="1" step="1"> Speed<br>
+    <b>WebGL primitive</b>
+    <input type="radio" name="primitive" value="triangles" checked> Triangles
+    <input type="radio" name="primitive" value="lines"> Lines<br>
+    <b>Projection type</b>
+    <input type="radio" name="projection" value="perspective" checked> Perspective
+    <input type="radio" name="projection" value="orthographic"> Orthographic<br>
+    <b>Decoration</b>
+    <input type="radio" name="decoration" value="no" checked> No
+    <input type="radio" name="decoration" value="yes"> Yes<br>
+    <b>Light direction</b><br>     
+    <input type="range" id="x" min="-2" max="2" value="1.1" step="0.1">X<br>     
+    <input type="range" id="y" min="-2" max="2" value="0.8" step="0.1">Y<br>     
+    <input type="range" id="z" min="-2" max="2" value="1.1" step="0.1">Z<br>
+    <b>Light color</b><br>     
+    <input type="range" id="r" min="0" max="1" value="0.5" step="0.1">R<br>     
+    <input type="range" id="g" min="0" max="1" value="0.5" step="0.1">G<br>     
+    <input type="range" id="b" min="0" max="1" value="0.5" step="0.1">B<br> 
+</body>
+
+</html>
