@@ -137,7 +137,17 @@
     }
 
     // This function is used to initialize textures and draw the scene
+    // CORRECCIÓN: las texturas se cargan una sola vez. Antes se volvían a crear e inicializar
+    // en cada fotograma, lo que saturaba el navegador y dejaba la escena en blanco.
+    var texturasCargadas = false;
+
     function initTexturesAndDraw(rotate, speed, primitive, decoration) {
+        if (texturasCargadas) {
+            fijarSamplers(decoration);
+            drawScene(rotate, speed, primitive);
+            return;
+        }
+
         var image0 = new Image();
         image0.src = 'portal.jpg';
         var image1 = new Image();
@@ -146,9 +156,16 @@
             loadTexture(gl, "u_Sampler0", image0, 0, true, decoration);
             image1.onload = function () {
                 loadTexture(gl, "u_Sampler1", image1, 1, true, decoration);
+                texturasCargadas = true;
                 drawScene(rotate, speed, primitive);
             }
         }
+    }
+
+    // Asigna las unidades de textura a los samplers según la decoración (igual que loadTexture)
+    function fijarSamplers(decoration) {
+        gl.uniform1i(gl.getUniformLocation(gl.program, "u_Sampler0"), 0);
+        gl.uniform1i(gl.getUniformLocation(gl.program, "u_Sampler1"), decoration === 'yes' ? 1 : 0);
     }
 
     // This function is used to check if a number is a power of 2
